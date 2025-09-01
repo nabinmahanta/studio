@@ -27,42 +27,46 @@ const calculateBalance = (transactions: Transaction[]): number => {
 };
 
 export const getCustomers = async (): Promise<(Customer & { balance: number })[]> => {
+  // 1. Fetch all customers in one query
   const customersCol = collection(db, 'customers');
-  const q = query(customersCol, orderBy('name'));
-  const customerSnapshot = await getDocs(q);
-  
-  const customersList: (Customer & { balance: number })[] = [];
+  const customersQuery = query(customersCol, orderBy('name'));
+  const customerSnapshot = await getDocs(customersQuery);
+  const customers = customerSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...(doc.data() as Omit<Customer, 'id' | 'transactions'>),
+    transactions: [] // Initialize transactions array
+  }));
+  const customerMap = new Map(customers.map(c => [c.id, c]));
 
-  // It's more efficient to fetch all transactions at once if possible,
-  // but for simplicity and correctness with subcollections, we'll fetch them per customer.
-  for (const customerDoc of customerSnapshot.docs) {
-    const customerData = customerDoc.data() as Omit<Customer, 'id'>;
-    
-    const transactionsCol = collection(db, 'customers', customerDoc.id, 'transactions');
-    const transactionsQuery = query(transactionsCol, orderBy('date', 'desc'));
-    const transactionsSnapshot = await getDocs(transactionsQuery);
-    
-    const transactions = transactionsSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
-        } as Transaction;
-    });
+  // 2. Fetch all transactions for all customers in a single collectionGroup query
+  const transactionsQuery = collectionGroup(db, 'transactions');
+  const transactionsSnapshot = await getDocs(transactionsQuery);
 
-    const balance = calculateBalance(transactions);
+  // 3. Group transactions by customer
+  transactionsSnapshot.forEach(doc => {
+    const transaction = {
+      id: doc.id,
+      ...doc.data(),
+      date: (doc.data().date as Timestamp).toDate().toISOString(),
+    } as Transaction;
     
-    customersList.push({
-      id: customerDoc.id,
-      ...customerData,
-      transactions,
-      balance,
-    });
-  }
-  
-  return customersList;
+    const customerId = doc.ref.parent.parent?.id;
+    if (customerId && customerMap.has(customerId)) {
+      customerMap.get(customerId)!.transactions.push(transaction);
+    }
+  });
+
+  // 4. Calculate balance for each customer and sort transactions
+  const result = Array.from(customerMap.values()).map(customer => {
+    // Sort transactions by date descending
+    customer.transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const balance = calculateBalance(customer.transactions);
+    return { ...customer, balance };
+  });
+
+  return result;
 };
+
 
 export const getCustomerById = async (id: string): Promise<(Customer & { balance: number }) | undefined> => {
   const customerDocRef = doc(db, 'customers', id);
@@ -126,4 +130,5 @@ export const addTransaction = async (customerId: string, transactionData: Omit<T
     const transactionsColRef = collection(db, 'customers', customerId, 'transactions');
     await addDoc(transactionsColRef, transactionWithTimestamp);
     revalidatePath(`/customers/${customerId}`);
+    revalidatePath('/dashboard');
 }
