@@ -24,35 +24,44 @@ export default function LoginPage() {
   const [mobileNumber, setMobileNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRecaptchaVerified, setIsRecaptchaVerified] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
   const setupRecaptcha = () => {
-    return new Promise((resolve, reject) => {
-        if (!window.recaptchaVerifier) {
-            window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-                'size': 'normal',
-                'callback': () => {
-                // reCAPTCHA solved, allow signInWithPhoneNumber.
-                resolve(true);
-                },
-                'expired-callback': () => {
-                    // Response expired. Ask user to solve reCAPTCHA again.
-                }
-            });
-            window.recaptchaVerifier.render().then(resolve).catch(reject);
-        } else {
-            resolve(true);
-        }
-    });
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'normal',
+          'callback': () => {
+            // reCAPTCHA solved
+            setIsRecaptchaVerified(true);
+          },
+          'expired-callback': () => {
+              // Response expired. Ask user to solve reCAPTCHA again.
+              setIsRecaptchaVerified(false);
+              toast({
+                variant: "destructive",
+                title: "reCAPTCHA Expired",
+                description: "Please solve the reCAPTCHA again.",
+              });
+          }
+      });
+      window.recaptchaVerifier.render();
+    }
   }
+
+  // Effect to set up reCAPTCHA when the component mounts and is on the mobile step
+  useEffect(() => {
+    if (step === 'mobile') {
+      setupRecaptcha();
+    }
+  }, [step]);
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mobileNumber.length >= 10) {
+    if (mobileNumber.length >= 10 && isRecaptchaVerified) {
       setLoading(true);
       try {
-        await setupRecaptcha();
         const appVerifier = window.recaptchaVerifier;
         if (!appVerifier) {
             throw new Error("reCAPTCHA not initialized");
@@ -70,12 +79,11 @@ export default function LoginPage() {
         toast({
           variant: "destructive",
           title: "Failed to send OTP",
-          description: "Please check your phone number and ensure reCAPTCHA is solved.",
+          description: "Please check your phone number and ensure Firebase phone auth is enabled.",
         });
         // Reset reCAPTCHA
-        if (window.recaptchaVerifier) {
-            window.recaptchaVerifier.clear();
-        }
+        window.recaptchaVerifier?.clear();
+        setIsRecaptchaVerified(false);
       } finally {
         setLoading(false);
       }
@@ -142,7 +150,7 @@ export default function LoginPage() {
                 </div>
               </div>
               <div id="recaptcha-container" className="flex justify-center"></div>
-              <Button type="submit" className="w-full font-bold" disabled={loading}>
+              <Button type="submit" className="w-full font-bold" disabled={loading || !isRecaptchaVerified}>
                 {loading ? <Loader2 className="animate-spin" /> : 'Send OTP'}
               </Button>
             </form>
@@ -169,7 +177,10 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex justify-center">
             {step === 'otp' && (
-                 <Button variant="link" size="sm" onClick={() => setStep('mobile')} disabled={loading}>
+                 <Button variant="link" size="sm" onClick={() => {
+                   setStep('mobile');
+                   setIsRecaptchaVerified(false);
+                 }} disabled={loading}>
                     Back to mobile number
                 </Button>
             )}
