@@ -77,7 +77,7 @@ export default function LoginPage() {
     
     // Cleanup on unmount
     return () => {
-        if (window.recaptchaVerifier) {
+        if (window.recaptchaVerifier && document.getElementById('recaptcha-container')) {
             try {
               window.recaptchaVerifier.clear();
             } catch (error) {
