@@ -45,36 +45,45 @@ export default function LoginPage() {
         recaptchaContainerRef.current.innerHTML = '';
     }
     
-    const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-        'size': 'normal',
-        'callback': () => {
-            setIsRecaptchaVerified(true);
-        },
-        'expired-callback': () => {
-            setIsRecaptchaVerified(false);
-            toast({
-                variant: "destructive",
-                title: "reCAPTCHA Expired",
-                description: "Please solve the reCAPTCHA again.",
-            });
-        }
-    });
+    try {
+      const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+          'size': 'normal',
+          'callback': () => {
+              setIsRecaptchaVerified(true);
+          },
+          'expired-callback': () => {
+              setIsRecaptchaVerified(false);
+              toast({
+                  variant: "destructive",
+                  title: "reCAPTCHA Expired",
+                  description: "Please solve the reCAPTCHA again.",
+              });
+          }
+      });
 
-    window.recaptchaVerifier = verifier;
-    
-    verifier.render().catch(error => {
-        console.error("reCAPTCHA render error:", error);
-        setLoading(false);
-        let description = "Could not render reCAPTCHA. Please refresh and try again.";
-        if (error.code === 'auth/internal-error') {
-            description = "An internal error occurred. This might be a configuration issue. Please try again later."
-        }
-        toast({
-            variant: "destructive",
-            title: "reCAPTCHA Error",
-            description: description,
-        });
-    });
+      window.recaptchaVerifier = verifier;
+      
+      verifier.render().catch(error => {
+          console.error("reCAPTCHA render error:", error);
+          setLoading(false);
+          let description = "Could not render reCAPTCHA. Please refresh and try again.";
+          if (error.code === 'auth/internal-error') {
+              description = "An internal error occurred. This might be a configuration issue. Please try again later."
+          }
+          toast({
+              variant: "destructive",
+              title: "reCAPTCHA Error",
+              description: description,
+          });
+      });
+    } catch (error) {
+      console.error("Failed to setup reCAPTCHA:", error);
+       toast({
+          variant: "destructive",
+          title: "Setup Error",
+          description: "Could not initialize login verification. Please check your connection and refresh.",
+      });
+    }
   }
   
   // Effect to set up reCAPTCHA on initial mount and clean it up properly
@@ -137,6 +146,8 @@ export default function LoginPage() {
         description = "The phone number is not valid. Please check it.";
       } else if (error.code === 'auth/billing-not-enabled'){
         description = "Firebase billing is not enabled for this project. Use a test number."
+      } else if (error.code === 'auth/network-request-failed') {
+        description = "Network error. Please check your internet connection and try again.";
       } else if (error.code === 'auth/internal-error') {
         description = "An internal error occurred. This might be a configuration issue. Please try again later."
       }
