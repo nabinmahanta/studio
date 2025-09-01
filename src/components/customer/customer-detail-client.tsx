@@ -41,8 +41,7 @@ export default function CustomerDetailClient({ customer }: CustomerDetailClientP
             description: `Successfully recorded new transaction.`,
         });
         
-        // Let server action handle revalidation
-        // router.refresh(); 
+        router.refresh(); 
 
     } catch (error) {
         console.error("Failed to add transaction:", error);
@@ -61,10 +60,10 @@ export default function CustomerDetailClient({ customer }: CustomerDetailClientP
         Back to Dashboard
       </Link>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex-1">
             <h1 className="font-headline text-3xl font-bold">{customer.name}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
+            <div className="mt-1 flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 text-muted-foreground">
                 <div className="flex items-center gap-2">
                     <Phone className="h-4 w-4" />
                     <span>{customer.mobile}</span>
@@ -77,20 +76,20 @@ export default function CustomerDetailClient({ customer }: CustomerDetailClientP
                 )}
             </div>
         </div>
-        <div className="mt-4 sm:mt-0 text-right">
+        <div className="sm:text-right bg-card sm:bg-transparent border sm:border-none rounded-lg p-4 sm:p-0">
           <p className="text-sm text-muted-foreground">Net Balance</p>
-          <p className={`font-headline text-3xl font-bold ${customer.balance > 0 ? 'text-green-700' : customer.balance < 0 ? 'text-red-700' : ''}`}>
+          <p className={`font-headline text-3xl font-bold ${customer.balance > 0 ? 'text-green-700 dark:text-green-400' : customer.balance < 0 ? 'text-red-700 dark:text-red-400' : ''}`}>
             {formatCurrency(Math.abs(customer.balance))}
           </p>
           {customer.balance !== 0 && (
-            <Badge variant="outline" className={customer.balance > 0 ? 'text-green-700 border-green-300' : 'text-red-700 border-red-300'}>
+            <Badge variant="outline" className={customer.balance > 0 ? 'text-green-700 border-green-300 dark:text-green-400 dark:border-green-700' : 'text-red-700 border-red-300 dark:text-red-400 dark:border-red-700'}>
               {customer.balance > 0 ? "You'll Get" : "You'll Give"}
             </Badge>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <AddTransactionDialog onAddTransaction={handleAddTransaction} type="credit" />
         <AddTransactionDialog onAddTransaction={handleAddTransaction} type="debit" />
         <GenerateReminderDialog 

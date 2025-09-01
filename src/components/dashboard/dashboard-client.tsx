@@ -10,6 +10,7 @@ import CustomerList from '@/components/dashboard/customer-list';
 import AddEditCustomerDialog from '@/components/customer/add-edit-customer-dialog';
 import { addCustomer, updateCustomer } from '@/lib/data';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '../ui/button';
 
 type DashboardClientProps = {
   initialCustomers: (Customer & { balance: number })[];
@@ -42,13 +43,12 @@ export default function DashboardClient({ initialCustomers, stats: initialStats 
         // Edit existing customer
         await updateCustomer(customerId, customerData);
         toast({ title: "Customer Updated", description: `${customerData.name}'s details have been updated.` });
-        router.refresh(); // Refetch data to update the list
+        router.refresh();
       } else {
         // Add new customer
         const newCustomer = await addCustomer(customerData);
         toast({ title: "Customer Added", description: `${newCustomer.name} has been added.` });
-        // Redirect to the new customer's detail page.
-        router.push(`/customers/${newCustomer.id}`); 
+        router.push(`/customers/${newCustomer.id}`);
       }
       return true;
     } catch (error) {
@@ -63,7 +63,7 @@ export default function DashboardClient({ initialCustomers, stats: initialStats 
       <StatsCards stats={stats} />
       
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="relative w-full sm:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -74,10 +74,10 @@ export default function DashboardClient({ initialCustomers, stats: initialStats 
             />
           </div>
           <AddEditCustomerDialog onSave={handleSaveCustomer}>
-            <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full sm:w-auto font-bold">
+            <Button className="w-full sm:w-auto font-bold">
               <PlusCircle className="mr-2 h-5 w-5" />
               Add Customer
-            </button>
+            </Button>
           </AddEditCustomerDialog>
         </div>
         

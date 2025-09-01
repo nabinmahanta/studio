@@ -15,11 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { Transaction } from '@/lib/types';
-import { PlusCircle, MinusCircle } from 'lucide-react';
+import { PlusCircle, MinusCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 type AddTransactionDialogProps = {
-  onAddTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
+  onAddTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => Promise<void> | void;
   type: 'credit' | 'debit';
 };
 
@@ -27,9 +27,10 @@ export default function AddTransactionDialog({ onAddTransaction, type }: AddTran
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount) || numericAmount <= 0) {
@@ -41,11 +42,9 @@ export default function AddTransactionDialog({ onAddTransaction, type }: AddTran
       return;
     }
 
-    onAddTransaction({ type, amount: numericAmount, notes });
-    toast({
-        title: "Transaction Added",
-        description: `Successfully recorded ${type === 'credit' ? 'credit' : 'debit'} of ${numericAmount}.`,
-    });
+    setLoading(true);
+    await onAddTransaction({ type, amount: numericAmount, notes });
+    setLoading(false);
 
     setAmount('');
     setNotes('');
@@ -57,7 +56,7 @@ export default function AddTransactionDialog({ onAddTransaction, type }: AddTran
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant={isCredit ? "default" : "outline"} className={`w-full font-bold ${isCredit ? '' : 'text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700'}`}>
+        <Button variant={isCredit ? "default" : "destructive"} className="w-full font-bold">
             {isCredit ? <PlusCircle className="mr-2 h-5 w-5" /> : <MinusCircle className="mr-2 h-5 w-5" />}
             {isCredit ? 'You Gave' : 'You Got'}
         </Button>
@@ -71,35 +70,31 @@ export default function AddTransactionDialog({ onAddTransaction, type }: AddTran
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="amount" className="text-right">
-                Amount
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="amount">Amount</Label>
               <Input
                 id="amount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="col-span-3"
                 placeholder="₹0.00"
                 required
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="notes" className="text-right">
-                Notes
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
               <Textarea
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="col-span-3"
                 placeholder="Optional: payment for invoice #123"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit" className="font-bold">Save Transaction</Button>
+            <Button type="submit" className="font-bold w-full" disabled={loading}>
+              {loading ? <Loader2 className="animate-spin" /> : 'Save Transaction'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
