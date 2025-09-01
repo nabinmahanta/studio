@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,11 @@ import { auth } from '@/lib/firebase';
 import { signInWithPhoneNumber, ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
-// Extend window interface to include confirmationResult
+// Extend window interface to include auth helpers
 declare global {
   interface Window {
     confirmationResult?: ConfirmationResult;
+    recaptchaVerifier?: RecaptchaVerifier;
   }
 }
 
@@ -25,18 +26,39 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // This is a dummy verifier that doesn't show a reCAPTCHA widget.
-    // It's often used for testing or in environments where you handle verification differently.
-    // NOTE: For production, you must configure App Check in Firebase.
-    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'sign-in-button', {
-      'size': 'invisible',
-      'callback': () => {
-        // reCAPTCHA solved, allow sign-in
-      }
-    });
-  }, []);
+    // This effect handles setting up the reCAPTCHA verifier
+    // It's designed to run only once when the 'mobile' step is active
+    if (step === 'mobile' && recaptchaContainerRef.current) {
+        if (window.recaptchaVerifier && document.getElementById('recaptcha-container')?.hasChildNodes()) {
+            // If it's already rendered, don't create a new one
+            return;
+        }
+
+        // Create the invisible reCAPTCHA verifier
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': () => {
+              // reCAPTCHA solved, allow sign-in
+            }
+        });
+        window.recaptchaVerifier.render(); // Explicitly render the verifier
+    }
+
+    // Cleanup function to clear the verifier when the component unmounts
+    return () => {
+        if (window.recaptchaVerifier) {
+            try {
+                window.recaptchaVerifier.clear();
+            } catch (error) {
+                console.error("Failed to clear reCAPTCHA verifier on unmount:", error);
+            }
+        }
+    };
+  }, [step]);
+
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +143,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+      <div id="recaptcha-container" ref={recaptchaContainerRef}></div>
       <div className="mb-8 flex items-center gap-3 text-foreground">
         <Coins className="h-10 w-10 text-primary" />
         <h1 className="font-headline text-4xl font-bold">Lekha Sahayak</h1>
@@ -156,7 +179,7 @@ export default function LoginPage() {
                     />
                 </div>
               </div>
-              <Button id="sign-in-button" type="submit" className="w-full font-bold" disabled={loading}>
+              <Button type="submit" className="w-full font-bold" disabled={loading}>
                 {loading ? <Loader2 className="animate-spin" /> : 'Send OTP'}
               </Button>
             </form>
