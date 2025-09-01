@@ -30,31 +30,32 @@ export default function LoginPage() {
 
   useEffect(() => {
     // This effect handles setting up the reCAPTCHA verifier
-    // It's designed to run only once when the 'mobile' step is active
+    // It's designed to run only when the 'mobile' step is active
     if (step === 'mobile' && recaptchaContainerRef.current) {
-        if (window.recaptchaVerifier && document.getElementById('recaptcha-container')?.hasChildNodes()) {
-            // If it's already rendered, don't create a new one
-            return;
+        if (!window.recaptchaVerifier) {
+            // Create the invisible reCAPTCHA verifier if it doesn't exist
+            window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                'size': 'invisible',
+                'callback': () => {
+                  // reCAPTCHA solved, allow sign-in
+                }
+            });
+            window.recaptchaVerifier.render(); // Explicitly render the verifier
         }
-
-        // Create the invisible reCAPTCHA verifier
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-            'size': 'invisible',
-            'callback': () => {
-              // reCAPTCHA solved, allow sign-in
-            }
-        });
-        window.recaptchaVerifier.render(); // Explicitly render the verifier
     }
 
-    // Cleanup function to clear the verifier when the component unmounts
+    // Cleanup function to clear the verifier when the component unmounts or step changes
     return () => {
         if (window.recaptchaVerifier) {
-            try {
-                window.recaptchaVerifier.clear();
-            } catch (error) {
-                console.error("Failed to clear reCAPTCHA verifier on unmount:", error);
+            // Only try to clear if the container is still in the DOM
+            if (document.getElementById('recaptcha-container')) {
+                 try {
+                    window.recaptchaVerifier.clear();
+                 } catch (error) {
+                    console.error("Failed to clear reCAPTCHA verifier on unmount:", error);
+                 }
             }
+            window.recaptchaVerifier = undefined;
         }
     };
   }, [step]);
