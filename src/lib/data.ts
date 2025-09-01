@@ -72,7 +72,7 @@ export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transacti
 };
 
 export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
-  let customerToUpdate = MOCK_CUSTOMERS.find(c => c.id === customer.id);
+  let customerToUpdate = MOCK_CUSTOMERS.find(c => c.id === customerId);
   if (!customerToUpdate) {
     throw new Error("Customer not found");
   }
