@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Coins, LogOut } from 'lucide-react';
+import { Coins, LogOut, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -33,7 +33,7 @@ export default function AppHeader() {
   };
 
   const getInitials = (name: string | null | undefined) => {
-    return name ? name.charAt(0).toUpperCase() : 'P';
+    return name ? name.charAt(0).toUpperCase() : null;
   }
 
   return (
@@ -51,7 +51,7 @@ export default function AppHeader() {
             <Button variant="ghost" className="relative h-10 w-10 rounded-full">
               <Avatar className="h-9 w-9">
                  <AvatarFallback>
-                    {loading ? '' : user?.displayName ? getInitials(user.displayName) : 'P'}
+                    {loading ? '' : user?.displayName ? getInitials(user.displayName) : <UserIcon className="h-5 w-5" />}
                  </AvatarFallback>
               </Avatar>
             </Button>
