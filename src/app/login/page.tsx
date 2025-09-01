@@ -28,28 +28,36 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        'size': 'normal',
-        'callback': () => {
-          // reCAPTCHA solved, allow signInWithPhoneNumber.
+    return new Promise((resolve, reject) => {
+        if (!window.recaptchaVerifier) {
+            window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                'size': 'normal',
+                'callback': () => {
+                // reCAPTCHA solved, allow signInWithPhoneNumber.
+                resolve(true);
+                },
+                'expired-callback': () => {
+                    // Response expired. Ask user to solve reCAPTCHA again.
+                }
+            });
+            window.recaptchaVerifier.render().then(resolve).catch(reject);
+        } else {
+            resolve(true);
         }
-      });
-      window.recaptchaVerifier.render();
-    }
+    });
   }
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mobileNumber.length >= 10) {
       setLoading(true);
-      setupRecaptcha();
       try {
-        const fullMobileNumber = `+91${mobileNumber}`;
+        await setupRecaptcha();
         const appVerifier = window.recaptchaVerifier;
         if (!appVerifier) {
             throw new Error("reCAPTCHA not initialized");
         }
+        const fullMobileNumber = `+91${mobileNumber}`;
         const confirmationResult = await signInWithPhoneNumber(auth, fullMobileNumber, appVerifier);
         window.confirmationResult = confirmationResult;
         setStep('otp');
@@ -62,11 +70,11 @@ export default function LoginPage() {
         toast({
           variant: "destructive",
           title: "Failed to send OTP",
-          description: "Please solve the reCAPTCHA and try again.",
+          description: "Please check your phone number and ensure reCAPTCHA is solved.",
         });
         // Reset reCAPTCHA
         if (window.recaptchaVerifier) {
-            window.recaptchaVerifier.render();
+            window.recaptchaVerifier.clear();
         }
       } finally {
         setLoading(false);
