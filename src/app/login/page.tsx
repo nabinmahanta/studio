@@ -30,43 +30,58 @@ export default function LoginPage() {
   const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
   const setupRecaptcha = () => {
-    // Check if the container is in the DOM and if a verifier instance already exists
-    if (window.recaptchaVerifier && document.getElementById('recaptcha-container')) {
-        // If it already exists, clear it before creating a new one
-        // This is important for re-attempts
-        window.recaptchaVerifier.clear();
+    // If a verifier already exists, re-render it. Otherwise, create a new one.
+    // This avoids race conditions and internal errors with .clear()
+    if (window.recaptchaVerifier) {
+      window.recaptchaVerifier.render().catch(error => {
+        console.error("reCAPTCHA re-render error:", error);
+        // If re-render fails, try creating a new one from scratch.
+        if (recaptchaContainerRef.current) {
+            recaptchaContainerRef.current.innerHTML = "";
+            window.recaptchaVerifier = undefined;
+            createRecaptcha();
+        }
+      });
+    } else if (recaptchaContainerRef.current) {
+      createRecaptcha();
     }
-    if (recaptchaContainerRef.current) {
-        // Use an ID on the container to ensure we can check for its existence
-        recaptchaContainerRef.current.id = "recaptcha-container";
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-            'size': 'normal',
-            'timeout': 120000, // 2 minutes timeout
-            'callback': () => {
-                // reCAPTCHA solved
-                setIsRecaptchaVerified(true);
-            },
-            'expired-callback': () => {
-                // Response expired. Ask user to solve reCAPTCHA again.
-                setLoading(false);
-                setIsRecaptchaVerified(false);
-                toast({
-                    variant: "destructive",
-                    title: "reCAPTCHA Expired",
-                    description: "Please solve the reCAPTCHA again.",
-                });
-            }
-        });
-        window.recaptchaVerifier.render().catch(error => {
-            console.error("reCAPTCHA render error:", error);
+  }
+
+  const createRecaptcha = () => {
+    if (!recaptchaContainerRef.current) return;
+    
+    // Ensure container is empty before rendering
+    recaptchaContainerRef.current.innerHTML = "";
+    const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+        'size': 'normal',
+        'timeout': 120000, // 2 minutes timeout
+        'callback': () => {
+            // reCAPTCHA solved
+            setIsRecaptchaVerified(true);
+        },
+        'expired-callback': () => {
+            // Response expired. Ask user to solve reCAPTCHA again.
             setLoading(false);
+            setIsRecaptchaVerified(false);
             toast({
                 variant: "destructive",
-                title: "reCAPTCHA Error",
-                description: "Could not render reCAPTCHA. Please refresh and try again.",
+                title: "reCAPTCHA Expired",
+                description: "Please solve the reCAPTCHA again.",
             });
+        }
+    });
+
+    window.recaptchaVerifier = verifier;
+    
+    verifier.render().catch(error => {
+        console.error("reCAPTCHA render error:", error);
+        setLoading(false);
+        toast({
+            variant: "destructive",
+            title: "reCAPTCHA Error",
+            description: "Could not render reCAPTCHA. Please refresh and try again.",
         });
-    }
+    });
   }
 
   // Effect to set up reCAPTCHA when the component mounts and is on the mobile step
@@ -77,13 +92,8 @@ export default function LoginPage() {
     
     // Cleanup on unmount
     return () => {
-        if (window.recaptchaVerifier && document.getElementById('recaptcha-container')) {
-            try {
-              window.recaptchaVerifier.clear();
-            } catch (error) {
-              console.error("Failed to clear reCAPTCHA verifier on unmount:", error);
-            }
-        }
+        // Just remove the instance, no need to call .clear() which can cause errors
+        window.recaptchaVerifier = undefined;
     }
   }, [step]);
 
