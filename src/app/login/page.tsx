@@ -27,24 +27,30 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (step === 'mobile' && !window.recaptchaVerifier) {
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
       window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        'size': 'invisible',
+        'size': 'normal',
         'callback': () => {
           // reCAPTCHA solved, allow signInWithPhoneNumber.
         }
       });
+      window.recaptchaVerifier.render();
     }
-  }, [step]);
+  }
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mobileNumber.length >= 10 && window.recaptchaVerifier) {
+    if (mobileNumber.length >= 10) {
       setLoading(true);
+      setupRecaptcha();
       try {
         const fullMobileNumber = `+91${mobileNumber}`;
-        const confirmationResult = await signInWithPhoneNumber(auth, fullMobileNumber, window.recaptchaVerifier);
+        const appVerifier = window.recaptchaVerifier;
+        if (!appVerifier) {
+            throw new Error("reCAPTCHA not initialized");
+        }
+        const confirmationResult = await signInWithPhoneNumber(auth, fullMobileNumber, appVerifier);
         window.confirmationResult = confirmationResult;
         setStep('otp');
         toast({
@@ -56,8 +62,12 @@ export default function LoginPage() {
         toast({
           variant: "destructive",
           title: "Failed to send OTP",
-          description: "Please check the mobile number and try again.",
+          description: "Please solve the reCAPTCHA and try again.",
         });
+        // Reset reCAPTCHA
+        if (window.recaptchaVerifier) {
+            window.recaptchaVerifier.render();
+        }
       } finally {
         setLoading(false);
       }
@@ -89,7 +99,6 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <div id="recaptcha-container"></div>
       <div className="mb-8 flex items-center gap-3 text-foreground">
         <Coins className="h-10 w-10 text-primary" />
         <h1 className="font-headline text-4xl font-bold">Lekha Sahayak</h1>
@@ -124,6 +133,7 @@ export default function LoginPage() {
                     />
                 </div>
               </div>
+              <div id="recaptcha-container" className="flex justify-center"></div>
               <Button type="submit" className="w-full font-bold" disabled={loading}>
                 {loading ? <Loader2 className="animate-spin" /> : 'Send OTP'}
               </Button>
