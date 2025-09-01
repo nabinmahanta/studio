@@ -1,6 +1,6 @@
 import type { Customer, Transaction } from '@/lib/types';
 
-// Simulate a persistent in-memory store
+// Simulate a persistent in-memory store by defining it outside the functions
 let MOCK_CUSTOMERS: Omit<Customer, 'transactions' | 'balance'>[] = [
   { id: '1', name: 'Rajesh Kumar', mobile: '9876543210', address: '123, MG Road, Bangalore' },
   { id: '2', name: 'Priya Sharma', mobile: '8765432109', address: '456, Park Street, Kolkata' },
@@ -59,12 +59,12 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
 };
 
 export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
-  const newId = String(Date.now()); // Using timestamp for a more unique ID
+  const newId = String(Date.now());
   const newCustomer = {
     id: newId,
     ...customerData,
   };
-  // Add to the "database"
+  // Add to the "database" by unshifting to the start of the array
   MOCK_CUSTOMERS.unshift(newCustomer);
   MOCK_TRANSACTIONS[newId] = [];
   
@@ -72,7 +72,7 @@ export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transacti
 };
 
 export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
-  let customerToUpdate = MOCK_CUSTOMERS.find(c => c.id === customerId);
+  let customerToUpdate = MOCK_CUSTOMERS.find(c => c.id === customer.id);
   if (!customerToUpdate) {
     throw new Error("Customer not found");
   }
