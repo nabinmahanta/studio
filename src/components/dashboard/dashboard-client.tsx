@@ -47,8 +47,7 @@ export default function DashboardClient({ initialCustomers, stats: initialStats 
         // Add new customer
         const newCustomer = await addCustomer(customerData);
         toast({ title: "Customer Added", description: `${newCustomer.name} has been added.` });
-        // Navigate to the new customer's page and then refresh to load their data.
-        router.push(`/customers/${newCustomer.id}`);
+        // Refresh the current page (dashboard) to show the new customer in the list.
         router.refresh(); 
       }
       return true;
