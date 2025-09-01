@@ -31,12 +31,20 @@ export default function LoginPage() {
 
   const setupRecaptcha = () => {
     if (!recaptchaContainerRef.current) return;
-
-    // Use a flag to ensure this only runs once per render
+    
+    // Ensure the container is empty before rendering a new reCAPTCHA
     if (window.recaptchaVerifier) {
-      return;
+        // This is a safety net, but the useEffect cleanup should handle it.
+        try {
+            window.recaptchaVerifier.clear();
+        } catch (error) {
+            console.error("Error clearing existing verifier in setupRecaptcha:", error);
+        }
     }
-
+    if (recaptchaContainerRef.current) {
+        recaptchaContainerRef.current.innerHTML = '';
+    }
+    
     const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
         'size': 'normal',
         'callback': () => {
@@ -57,35 +65,41 @@ export default function LoginPage() {
     verifier.render().catch(error => {
         console.error("reCAPTCHA render error:", error);
         setLoading(false);
+        let description = "Could not render reCAPTCHA. Please refresh and try again.";
+        if (error.code === 'auth/internal-error') {
+            description = "An internal error occurred. This might be a configuration issue. Please try again later."
+        }
         toast({
             variant: "destructive",
             title: "reCAPTCHA Error",
-            description: "Could not render reCAPTCHA. Please refresh and try again.",
+            description: description,
         });
     });
   }
-
-  // Effect to set up and tear down reCAPTCHA
+  
+  // Effect to set up reCAPTCHA on initial mount and clean it up properly
   useEffect(() => {
-    if (step === 'mobile') {
+    if (step === 'mobile' && !window.recaptchaVerifier) {
       setupRecaptcha();
     }
     
-    // Cleanup function to run when component unmounts or step changes
+    // Cleanup function to run when component unmounts. This is crucial.
     return () => {
       if (window.recaptchaVerifier) {
         try {
           window.recaptchaVerifier.clear();
         } catch (error) {
+          // This can sometimes throw an error if the widget is already gone, so we catch it.
           console.error("Failed to clear reCAPTCHA on cleanup:", error)
         }
         window.recaptchaVerifier = undefined;
       }
+      // Also ensure the DOM is clean
       if (recaptchaContainerRef.current) {
         recaptchaContainerRef.current.innerHTML = "";
       }
     };
-  }, [step]);
+  }, [step]); // Rerun effect if the step changes
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,10 +146,9 @@ export default function LoginPage() {
         description: description,
       });
       // Reset reCAPTCHA for the user to try again
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.render();
-      }
       setIsRecaptchaVerified(false);
+      // Re-run the setup to be safe
+      setupRecaptcha();
     } finally {
       setLoading(false);
     }
@@ -173,6 +186,19 @@ export default function LoginPage() {
     setStep('mobile');
     setOtp('');
     setIsRecaptchaVerified(false);
+    // Crucially, when we go back, we need to ensure the verifier is gone
+    // so the useEffect can set it up cleanly again.
+    if (window.recaptchaVerifier) {
+        try {
+            window.recaptchaVerifier.clear();
+        } catch (error) {
+            console.error("Error clearing verifier on back:", error);
+        }
+        window.recaptchaVerifier = undefined;
+    }
+    if (recaptchaContainerRef.current) {
+        recaptchaContainerRef.current.innerHTML = '';
+    }
   }
 
   return (
