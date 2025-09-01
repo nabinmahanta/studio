@@ -33,7 +33,7 @@ export default function AppHeader() {
   };
 
   const getInitials = (name: string | null | undefined) => {
-    return name ? name.charAt(0).toUpperCase() : 'U';
+    return name ? name.charAt(0).toUpperCase() : 'P';
   }
 
   return (
@@ -51,7 +51,7 @@ export default function AppHeader() {
             <Button variant="ghost" className="relative h-10 w-10 rounded-full">
               <Avatar className="h-9 w-9">
                  <AvatarFallback>
-                    {loading ? '' : getInitials(user?.displayName)}
+                    {loading ? '' : user?.displayName ? getInitials(user.displayName) : 'P'}
                  </AvatarFallback>
               </Avatar>
             </Button>
