@@ -10,12 +10,14 @@ import { MoreHorizontal } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import AddEditCustomerDialog from '../customer/add-edit-customer-dialog';
 
 type CustomerListProps = {
   customers: (Customer & { balance: number })[];
+  onSave: (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>, customerId?: string) => Promise<boolean>;
 };
 
-export default function CustomerList({ customers }: CustomerListProps) {
+export default function CustomerList({ customers, onSave }: CustomerListProps) {
     const { toast } = useToast();
 
     const handleAction = (action: string) => {
@@ -67,7 +69,11 @@ export default function CustomerList({ customers }: CustomerListProps) {
                             <DropdownMenuItem asChild>
                                 <Link href={`/customers/${customer.id}`}>View Details</Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleAction('Editing customer')}>Edit</DropdownMenuItem>
+                            <AddEditCustomerDialog customer={customer} onSave={onSave}>
+                              <button className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 w-full">
+                                Edit
+                              </button>
+                            </AddEditCustomerDialog>
                             <DropdownMenuItem className="text-red-600" onClick={() => handleAction('Deleting customer')}>Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

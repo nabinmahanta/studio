@@ -20,7 +20,7 @@ const MOCK_TRANSACTIONS: Record<string, Transaction[]> = {
   '5': [],
 };
 
-const MOCK_CUSTOMERS: Omit<Customer, 'transactions'>[] = [
+const MOCK_CUSTOMERS: Omit<Customer, 'transactions' | 'balance'>[] = [
   { id: '1', name: 'Rajesh Kumar', mobile: '9876543210', address: '123, MG Road, Bangalore' },
   { id: '2', name: 'Priya Sharma', mobile: '8765432109', address: '456, Park Street, Kolkata' },
   { id: '3', name: 'Amit Singh', mobile: '7654321098' },
@@ -42,7 +42,7 @@ export const getCustomers = async (): Promise<(Customer & { balance: number })[]
     const transactions = MOCK_TRANSACTIONS[c.id] || [];
     const balance = calculateBalance(transactions);
     return { ...c, transactions, balance };
-  });
+  }).sort((a, b) => parseInt(b.id) - parseInt(a.id));
 };
 
 export const getCustomerById = async (id: string): Promise<(Customer & { balance: number }) | undefined> => {
@@ -52,4 +52,26 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
   const transactions = MOCK_TRANSACTIONS[id] || [];
   const balance = calculateBalance(transactions);
   return { ...customer, transactions, balance };
+};
+
+export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer> => {
+  const newId = String(MOCK_CUSTOMERS.length + 1);
+  const newCustomer = {
+    id: newId,
+    ...customerData,
+  };
+  MOCK_CUSTOMERS.push(newCustomer);
+  MOCK_TRANSACTIONS[newId] = [];
+  return { ...newCustomer, transactions: [] };
+};
+
+export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
+  let customerToUpdate = MOCK_CUSTOMERS.find(c => c.id === customerId);
+  if (!customerToUpdate) {
+    throw new Error("Customer not found");
+  }
+  customerToUpdate = { ...customerToUpdate, ...customerData };
+  const index = MOCK_CUSTOMERS.findIndex(c => c.id === customerId);
+  MOCK_CUSTOMERS[index] = customerToUpdate;
+  return customerToUpdate;
 };
