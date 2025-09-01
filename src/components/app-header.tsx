@@ -42,7 +42,7 @@ export default function AppHeader() {
         <Link href="/dashboard" className="flex items-center gap-2">
           <Coins className="h-7 w-7 text-primary" />
           <span className="font-headline text-xl font-bold text-foreground">
-            Lekha Sahayak
+            KhataPay
           </span>
         </Link>
 

@@ -147,7 +147,7 @@ export default function LoginPage() {
       <div id="recaptcha-container" ref={recaptchaContainerRef}></div>
       <div className="mb-8 flex items-center gap-3 text-foreground">
         <Coins className="h-10 w-10 text-primary" />
-        <h1 className="font-headline text-4xl font-bold">Lekha Sahayak</h1>
+        <h1 className="font-headline text-4xl font-bold">KhataPay</h1>
       </div>
       <Card className="w-full max-w-sm border-2 border-primary/20 shadow-xl">
         <CardHeader>
