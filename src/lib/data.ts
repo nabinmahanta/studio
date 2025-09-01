@@ -59,12 +59,12 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
 };
 
 export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
-  const newId = String(Date.now());
+  const newId = String(MOCK_CUSTOMERS.length + 1 + Date.now()); // More robust ID
   const newCustomer = {
     id: newId,
     ...customerData,
   };
-  // Add to the "database" by unshifting to the start of the array
+  // Add to the "database"
   MOCK_CUSTOMERS.unshift(newCustomer);
   MOCK_TRANSACTIONS[newId] = [];
   
@@ -72,12 +72,11 @@ export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transacti
 };
 
 export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
-  let customerToUpdate = MOCK_CUSTOMERS.find(c => c.id === customerId);
-  if (!customerToUpdate) {
+  const customerIndex = MOCK_CUSTOMERS.findIndex(c => c.id === customerId);
+  if (customerIndex === -1) {
     throw new Error("Customer not found");
   }
-  const updatedCustomer = { ...customerToUpdate, ...customerData };
-  const index = MOCK_CUSTOMERS.findIndex(c => c.id === customerId);
-  MOCK_CUSTOMERS[index] = updatedCustomer;
+  const updatedCustomer = { ...MOCK_CUSTOMERS[customerIndex], ...customerData };
+  MOCK_CUSTOMERS[customerIndex] = updatedCustomer;
   return updatedCustomer;
 };

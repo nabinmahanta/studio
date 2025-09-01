@@ -40,20 +40,16 @@ export default function DashboardClient({ initialCustomers, stats: initialStats 
     try {
       if (customerId) {
         // Edit existing customer
-        const updatedCustomer = await updateCustomer(customerId, customerData);
-        setCustomers(prevCustomers => 
-          prevCustomers.map(c => c.id === customerId ? { ...c, ...updatedCustomer } : c)
-        );
+        await updateCustomer(customerId, customerData);
         toast({ title: "Customer Updated", description: `${customerData.name}'s details have been updated.` });
+        router.refresh(); // Refetch data to update the list
       } else {
         // Add new customer
         const newCustomer = await addCustomer(customerData);
-        const newCustomerWithBalance = { ...newCustomer, balance: 0, transactions: [] };
-        // We push to router first, then update state to avoid seeing the new customer
-        // appear and disappear before navigation. The page will be re-rendered on navigation.
         toast({ title: "Customer Added", description: `${newCustomer.name} has been added.` });
+        // Navigate to the new customer's page and then refresh to load their data.
         router.push(`/customers/${newCustomer.id}`);
-        router.refresh(); // This tells Next.js to refetch server data on the new route
+        router.refresh(); 
       }
       return true;
     } catch (error) {
