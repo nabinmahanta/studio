@@ -55,7 +55,7 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
 };
 
 export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer> => {
-  const newId = String(MOCK_CUSTOMERS.length + 1);
+  const newId = String(Math.max(...MOCK_CUSTOMERS.map(c => parseInt(c.id))) + 1);
   const newCustomer = {
     id: newId,
     ...customerData,
