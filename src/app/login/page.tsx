@@ -30,12 +30,15 @@ export default function LoginPage() {
   const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
   const setupRecaptcha = () => {
-    if (window.recaptchaVerifier) {
+    // Check if the container is in the DOM and if a verifier instance already exists
+    if (window.recaptchaVerifier && document.getElementById('recaptcha-container')) {
         // If it already exists, clear it before creating a new one
         // This is important for re-attempts
         window.recaptchaVerifier.clear();
     }
     if (recaptchaContainerRef.current) {
+        // Use an ID on the container to ensure we can check for its existence
+        recaptchaContainerRef.current.id = "recaptcha-container";
         window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
             'size': 'normal',
             'timeout': 120000, // 2 minutes timeout
@@ -75,7 +78,11 @@ export default function LoginPage() {
     // Cleanup on unmount
     return () => {
         if (window.recaptchaVerifier) {
-            window.recaptchaVerifier.clear();
+            try {
+              window.recaptchaVerifier.clear();
+            } catch (error) {
+              console.error("Failed to clear reCAPTCHA verifier on unmount:", error);
+            }
         }
     }
   }, [step]);
@@ -114,6 +121,8 @@ export default function LoginPage() {
         description = "The phone number is not valid. Please check it.";
       } else if (error.code === 'auth/billing-not-enabled'){
         description = "Firebase billing is not enabled for this project. Use a test number."
+      } else if (error.code === 'auth/internal-error') {
+        description = "An internal error occurred. This might be a configuration issue. Please try again later."
       }
       toast({
         variant: "destructive",
