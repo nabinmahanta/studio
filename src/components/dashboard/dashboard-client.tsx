@@ -2,6 +2,7 @@
 
 import type { Customer } from '@/lib/types';
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { PlusCircle, Search } from 'lucide-react';
 import StatsCards from '@/components/dashboard/stats-cards';
@@ -24,6 +25,7 @@ export default function DashboardClient({ initialCustomers, stats: initialStats 
   const [customers, setCustomers] = useState(initialCustomers);
   const [stats, setStats] = useState(initialStats);
   const { toast } = useToast();
+  const router = useRouter();
 
   const filteredCustomers = useMemo(() => {
     if (!searchTerm) return customers;
@@ -46,10 +48,11 @@ export default function DashboardClient({ initialCustomers, stats: initialStats 
       } else {
         // Add new customer
         const newCustomer = await addCustomer(customerData);
-        const newCustomerWithBalance = { ...newCustomer, balance: 0 };
+        const newCustomerWithBalance = { ...newCustomer, balance: 0, transactions: [] };
         setCustomers(prevCustomers => [newCustomerWithBalance, ...prevCustomers]);
         setStats(prevStats => ({...prevStats, totalCustomers: prevStats.totalCustomers + 1 }));
-        toast({ title: "Customer Added", description: `${newCustomer.name} has been added to your list.` });
+        toast({ title: "Customer Added", description: `${newCustomer.name} has been added.` });
+        router.push(`/customers/${newCustomer.id}`);
       }
       return true;
     } catch (error) {

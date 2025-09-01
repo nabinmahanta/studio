@@ -1,6 +1,15 @@
 import type { Customer, Transaction } from '@/lib/types';
 
-const MOCK_TRANSACTIONS: Record<string, Transaction[]> = {
+// Simulate a persistent in-memory store
+let MOCK_CUSTOMERS: Omit<Customer, 'transactions' | 'balance'>[] = [
+  { id: '1', name: 'Rajesh Kumar', mobile: '9876543210', address: '123, MG Road, Bangalore' },
+  { id: '2', name: 'Priya Sharma', mobile: '8765432109', address: '456, Park Street, Kolkata' },
+  { id: '3', name: 'Amit Singh', mobile: '7654321098' },
+  { id: '4', name: 'Sunita Devi', mobile: '6543210987', address: '789, Marine Drive, Mumbai' },
+  { id: '5', name: 'Vikram Patel', mobile: '5432109876', address: '101, Connaught Place, Delhi' },
+];
+
+let MOCK_TRANSACTIONS: Record<string, Transaction[]> = {
   '1': [
     { id: 't1', type: 'credit', amount: 5000, date: '2023-10-15T10:00:00Z', notes: 'Advance payment' },
     { id: 't2', type: 'debit', amount: 2500, date: '2023-10-20T14:30:00Z', notes: 'Goods purchase' },
@@ -20,13 +29,6 @@ const MOCK_TRANSACTIONS: Record<string, Transaction[]> = {
   '5': [],
 };
 
-const MOCK_CUSTOMERS: Omit<Customer, 'transactions' | 'balance'>[] = [
-  { id: '1', name: 'Rajesh Kumar', mobile: '9876543210', address: '123, MG Road, Bangalore' },
-  { id: '2', name: 'Priya Sharma', mobile: '8765432109', address: '456, Park Street, Kolkata' },
-  { id: '3', name: 'Amit Singh', mobile: '7654321098' },
-  { id: '4', name: 'Sunita Devi', mobile: '6543210987', address: '789, Marine Drive, Mumbai' },
-  { id: '5', name: 'Vikram Patel', mobile: '5432109876', address: '101, Connaught Place, Delhi' },
-];
 
 const calculateBalance = (transactions: Transaction[]): number => {
   return transactions.reduce((acc, t) => {
@@ -38,7 +40,9 @@ const calculateBalance = (transactions: Transaction[]): number => {
 };
 
 export const getCustomers = async (): Promise<(Customer & { balance: number })[]> => {
-  return MOCK_CUSTOMERS.map(c => {
+  // Return a copy to avoid mutation issues in components
+  const customers = [...MOCK_CUSTOMERS];
+  return customers.map(c => {
     const transactions = MOCK_TRANSACTIONS[c.id] || [];
     const balance = calculateBalance(transactions);
     return { ...c, transactions, balance };
@@ -54,15 +58,17 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
   return { ...customer, transactions, balance };
 };
 
-export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer> => {
-  const newId = String(Math.max(...MOCK_CUSTOMERS.map(c => parseInt(c.id))) + 1);
+export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
+  const newId = String(Date.now()); // Using timestamp for a more unique ID
   const newCustomer = {
     id: newId,
     ...customerData,
   };
-  MOCK_CUSTOMERS.push(newCustomer);
+  // Add to the "database"
+  MOCK_CUSTOMERS.unshift(newCustomer);
   MOCK_TRANSACTIONS[newId] = [];
-  return { ...newCustomer, transactions: [] };
+  
+  return newCustomer;
 };
 
 export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
@@ -70,8 +76,8 @@ export const updateCustomer = async (customerId: string, customerData: Partial<O
   if (!customerToUpdate) {
     throw new Error("Customer not found");
   }
-  customerToUpdate = { ...customerToUpdate, ...customerData };
+  const updatedCustomer = { ...customerToUpdate, ...customerData };
   const index = MOCK_CUSTOMERS.findIndex(c => c.id === customerId);
-  MOCK_CUSTOMERS[index] = customerToUpdate;
-  return customerToUpdate;
+  MOCK_CUSTOMERS[index] = updatedCustomer;
+  return updatedCustomer;
 };
