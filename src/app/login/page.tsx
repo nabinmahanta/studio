@@ -32,18 +32,17 @@ export default function LoginPage() {
   const setupRecaptcha = () => {
     if (!recaptchaContainerRef.current) return;
 
-    // Ensure the container is empty before creating a new verifier
-    // This is the key to preventing duplicate widgets
-    recaptchaContainerRef.current.innerHTML = "";
+    // Use a flag to ensure this only runs once per render
+    if (window.recaptchaVerifier) {
+      return;
+    }
 
     const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
         'size': 'normal',
-        'timeout': 120000, // 2 minutes timeout
         'callback': () => {
             setIsRecaptchaVerified(true);
         },
         'expired-callback': () => {
-            setLoading(false);
             setIsRecaptchaVerified(false);
             toast({
                 variant: "destructive",
@@ -66,21 +65,31 @@ export default function LoginPage() {
     });
   }
 
-  // Effect to set up reCAPTCHA when the component mounts and is on the mobile step
+  // Effect to set up and tear down reCAPTCHA
   useEffect(() => {
     if (step === 'mobile') {
       setupRecaptcha();
     }
     
-    // Cleanup on unmount - just remove our reference
+    // Cleanup function to run when component unmounts or step changes
     return () => {
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (error) {
+          console.error("Failed to clear reCAPTCHA on cleanup:", error)
+        }
         window.recaptchaVerifier = undefined;
-    }
+      }
+      if (recaptchaContainerRef.current) {
+        recaptchaContainerRef.current.innerHTML = "";
+      }
+    };
   }, [step]);
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return; // Prevent multiple submissions
+    if (loading) return;
 
     if (!/^\d{10}$/.test(mobileNumber)) {
         toast({ variant: "destructive", title: "Invalid Mobile Number", description: "Please enter a valid 10-digit number." });
@@ -123,7 +132,9 @@ export default function LoginPage() {
         description: description,
       });
       // Reset reCAPTCHA for the user to try again
-      setupRecaptcha();
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.render();
+      }
       setIsRecaptchaVerified(false);
     } finally {
       setLoading(false);
@@ -196,7 +207,7 @@ export default function LoginPage() {
                     onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     required
                     pattern="\d{10}"
-                    className="rounded-l-none text-base"
+                    className="rounded-l-none text-base md:text-sm"
                     disabled={loading}
                     />
                 </div>
@@ -218,7 +229,7 @@ export default function LoginPage() {
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   required
                   maxLength={6}
-                  className="text-center text-lg tracking-[0.5em]"
+                  className="text-center text-lg tracking-[0.5em] md:text-sm"
                   disabled={loading}
                 />
               </div>
