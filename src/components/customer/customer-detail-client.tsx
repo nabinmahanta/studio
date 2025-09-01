@@ -3,7 +3,8 @@
 import type { Customer, Transaction } from '@/lib/types';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Phone, Home, FileText, MessageSquare, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Phone, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
@@ -12,30 +13,45 @@ import TransactionList from './transaction-list';
 import AddTransactionDialog from './add-transaction-dialog';
 import GenerateReminderDialog from './generate-reminder-dialog';
 import DownloadReportDialog from './download-report-dialog';
+import { addTransaction } from '@/lib/data';
+import { useToast } from '@/hooks/use-toast';
 
 type CustomerDetailClientProps = {
   customer: Customer & { balance: number };
 };
 
 export default function CustomerDetailClient({ customer }: CustomerDetailClientProps) {
-  const [transactions, setTransactions] = useState(customer.transactions);
   const [balance, setBalance] = useState(customer.balance);
   const businessName = "Your Business"; // This would come from user settings in a real app
+  const router = useRouter();
+  const { toast } = useToast();
 
-  const handleAddTransaction = (newTransaction: Omit<Transaction, 'id' | 'date'>) => {
-    const transactionWithId: Transaction = {
-        ...newTransaction,
-        id: `t-${Date.now()}`,
-        date: new Date().toISOString(),
-    };
-    
-    const updatedTransactions = [transactionWithId, ...transactions];
-    setTransactions(updatedTransactions);
+  const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id' | 'date'>) => {
+    try {
+        const transactionWithDate: Omit<Transaction, 'id'> = {
+            ...newTransaction,
+            date: new Date().toISOString(),
+        };
+        await addTransaction(customer.id, transactionWithDate);
 
-    const newBalance = updatedTransactions.reduce((acc, t) => {
-        return t.type === 'credit' ? acc + t.amount : acc - t.amount;
-    }, 0);
-    setBalance(newBalance);
+        // No need to manually update state, revalidatePath in the server action will trigger a refresh.
+        // For instant feedback, you can still update client state, but it's often better to rely on the refresh.
+        toast({
+            title: "Transaction Added",
+            description: `Successfully recorded new transaction.`,
+        });
+        
+        // Let server action handle revalidation
+        // router.refresh(); 
+
+    } catch (error) {
+        console.error("Failed to add transaction:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to add transaction. Please try again.",
+        });
+    }
   };
 
   return (
@@ -63,12 +79,12 @@ export default function CustomerDetailClient({ customer }: CustomerDetailClientP
         </div>
         <div className="mt-4 sm:mt-0 text-right">
           <p className="text-sm text-muted-foreground">Net Balance</p>
-          <p className={`font-headline text-3xl font-bold ${balance > 0 ? 'text-green-700' : balance < 0 ? 'text-red-700' : ''}`}>
-            {formatCurrency(Math.abs(balance))}
+          <p className={`font-headline text-3xl font-bold ${customer.balance > 0 ? 'text-green-700' : customer.balance < 0 ? 'text-red-700' : ''}`}>
+            {formatCurrency(Math.abs(customer.balance))}
           </p>
-          {balance !== 0 && (
-            <Badge variant="outline" className={balance > 0 ? 'text-green-700 border-green-300' : 'text-red-700 border-red-300'}>
-              {balance > 0 ? "You'll Get" : "You'll Give"}
+          {customer.balance !== 0 && (
+            <Badge variant="outline" className={customer.balance > 0 ? 'text-green-700 border-green-300' : 'text-red-700 border-red-300'}>
+              {customer.balance > 0 ? "You'll Get" : "You'll Give"}
             </Badge>
           )}
         </div>
@@ -79,11 +95,11 @@ export default function CustomerDetailClient({ customer }: CustomerDetailClientP
         <AddTransactionDialog onAddTransaction={handleAddTransaction} type="debit" />
         <GenerateReminderDialog 
             customerName={customer.name} 
-            outstandingAmount={balance} 
+            outstandingAmount={customer.balance} 
             businessName={businessName} 
-            disabled={balance <= 0}
+            disabled={customer.balance <= 0}
         />
-        <DownloadReportDialog disabled={transactions.length === 0} />
+        <DownloadReportDialog disabled={customer.transactions.length === 0} />
       </div>
 
       <Card className="shadow-md">
@@ -91,7 +107,7 @@ export default function CustomerDetailClient({ customer }: CustomerDetailClientP
           <CardTitle className="font-headline text-xl">Transaction History</CardTitle>
         </CardHeader>
         <CardContent>
-          <TransactionList transactions={transactions} />
+          <TransactionList transactions={customer.transactions} />
         </CardContent>
       </Card>
     </div>

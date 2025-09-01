@@ -1,34 +1,21 @@
+'use server';
+
+import { db } from '@/lib/firebase';
 import type { Customer, Transaction } from '@/lib/types';
-
-// Simulate a persistent in-memory store by defining it outside the functions
-let MOCK_CUSTOMERS: Omit<Customer, 'transactions' | 'balance'>[] = [
-  { id: '1', name: 'Rajesh Kumar', mobile: '9876543210', address: '123, MG Road, Bangalore' },
-  { id: '2', name: 'Priya Sharma', mobile: '8765432109', address: '456, Park Street, Kolkata' },
-  { id: '3', name: 'Amit Singh', mobile: '7654321098' },
-  { id: '4', name: 'Sunita Devi', mobile: '6543210987', address: '789, Marine Drive, Mumbai' },
-  { id: '5', name: 'Vikram Patel', mobile: '5432109876', address: '101, Connaught Place, Delhi' },
-];
-
-let MOCK_TRANSACTIONS: Record<string, Transaction[]> = {
-  '1': [
-    { id: 't1', type: 'credit', amount: 5000, date: '2023-10-15T10:00:00Z', notes: 'Advance payment' },
-    { id: 't2', type: 'debit', amount: 2500, date: '2023-10-20T14:30:00Z', notes: 'Goods purchase' },
-    { id: 't3', type: 'credit', amount: 1000, date: '2023-11-01T11:00:00Z', notes: 'Raw materials' },
-  ],
-  '2': [
-    { id: 't4', type: 'debit', amount: 15000, date: '2023-10-12T09:00:00Z', notes: 'Service fee' },
-    { id: 't5', type: 'credit', amount: 7000, date: '2023-10-25T16:00:00Z', notes: 'Invoice #123' },
-  ],
-  '3': [
-    { id: 't6', type: 'credit', amount: 800, date: '2023-11-05T12:00:00Z', notes: 'Supplies' },
-  ],
-  '4': [
-    { id: 't7', type: 'debit', amount: 3000, date: '2023-11-10T18:00:00Z', notes: 'Consulting' },
-    { id: 't8', type: 'debit', amount: 2000, date: '2023-11-12T10:00:00Z', notes: 'Follow-up' },
-  ],
-  '5': [],
-};
-
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  updateDoc,
+  query,
+  orderBy,
+  Timestamp,
+  writeBatch,
+  collectionGroup
+} from 'firebase/firestore';
+import { revalidatePath } from 'next/cache';
 
 const calculateBalance = (transactions: Transaction[]): number => {
   return transactions.reduce((acc, t) => {
@@ -40,43 +27,103 @@ const calculateBalance = (transactions: Transaction[]): number => {
 };
 
 export const getCustomers = async (): Promise<(Customer & { balance: number })[]> => {
-  // Return a copy to avoid mutation issues in components
-  const customers = [...MOCK_CUSTOMERS];
-  return customers.map(c => {
-    const transactions = MOCK_TRANSACTIONS[c.id] || [];
+  const customersCol = collection(db, 'customers');
+  const q = query(customersCol, orderBy('name'));
+  const customerSnapshot = await getDocs(q);
+  
+  const customersList: (Customer & { balance: number })[] = [];
+
+  // It's more efficient to fetch all transactions at once if possible,
+  // but for simplicity and correctness with subcollections, we'll fetch them per customer.
+  for (const customerDoc of customerSnapshot.docs) {
+    const customerData = customerDoc.data() as Omit<Customer, 'id'>;
+    
+    const transactionsCol = collection(db, 'customers', customerDoc.id, 'transactions');
+    const transactionsQuery = query(transactionsCol, orderBy('date', 'desc'));
+    const transactionsSnapshot = await getDocs(transactionsQuery);
+    
+    const transactions = transactionsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString(),
+        } as Transaction;
+    });
+
     const balance = calculateBalance(transactions);
-    return { ...c, transactions, balance };
-  }).sort((a, b) => parseInt(b.id) - parseInt(a.id));
+    
+    customersList.push({
+      id: customerDoc.id,
+      ...customerData,
+      transactions,
+      balance,
+    });
+  }
+  
+  return customersList;
 };
 
 export const getCustomerById = async (id: string): Promise<(Customer & { balance: number }) | undefined> => {
-  const customer = MOCK_CUSTOMERS.find(c => c.id === id);
-  if (!customer) return undefined;
-  
-  const transactions = MOCK_TRANSACTIONS[id] || [];
-  const balance = calculateBalance(transactions);
-  return { ...customer, transactions, balance };
-};
+  const customerDocRef = doc(db, 'customers', id);
+  const customerDoc = await getDoc(customerDocRef);
 
-export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
-  const newId = String(MOCK_CUSTOMERS.length + 1 + Date.now()); // More robust ID
-  const newCustomer = {
-    id: newId,
-    ...customerData,
-  };
-  // Add to the "database"
-  MOCK_CUSTOMERS.unshift(newCustomer);
-  MOCK_TRANSACTIONS[newId] = [];
-  
-  return newCustomer;
-};
-
-export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<Omit<Customer, 'transactions' | 'balance'>> => {
-  const customerIndex = MOCK_CUSTOMERS.findIndex(c => c.id === customerId);
-  if (customerIndex === -1) {
-    throw new Error("Customer not found");
+  if (!customerDoc.exists()) {
+    return undefined;
   }
-  const updatedCustomer = { ...MOCK_CUSTOMERS[customerIndex], ...customerData };
-  MOCK_CUSTOMERS[customerIndex] = updatedCustomer;
-  return updatedCustomer;
+
+  const customerData = customerDoc.data() as Omit<Customer, 'id'>;
+  
+  const transactionsCol = collection(db, 'customers', id, 'transactions');
+  const transactionsQuery = query(transactionsCol, orderBy('date', 'desc'));
+  const transactionsSnapshot = await getDocs(transactionsQuery);
+
+  const transactions = transactionsSnapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+        id: doc.id,
+        ...data,
+        date: (data.date as Timestamp).toDate().toISOString(),
+    } as Transaction;
+  });
+
+  const balance = calculateBalance(transactions);
+
+  return { 
+    id: customerDoc.id, 
+    ...customerData, 
+    transactions, 
+    balance 
+  };
 };
+
+export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer> => {
+  const customersCol = collection(db, 'customers');
+  const newCustomerRef = await addDoc(customersCol, customerData);
+
+  revalidatePath('/dashboard');
+  
+  return {
+    id: newCustomerRef.id,
+    ...customerData,
+    transactions: [],
+  };
+};
+
+export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<void> => {
+  const customerDocRef = doc(db, 'customers', customerId);
+  await updateDoc(customerDocRef, customerData);
+  revalidatePath('/dashboard');
+  revalidatePath(`/customers/${customerId}`);
+};
+
+export const addTransaction = async (customerId: string, transactionData: Omit<Transaction, 'id'>): Promise<void> => {
+    const transactionWithTimestamp = {
+        ...transactionData,
+        date: Timestamp.fromDate(new Date(transactionData.date)),
+    };
+    
+    const transactionsColRef = collection(db, 'customers', customerId, 'transactions');
+    await addDoc(transactionsColRef, transactionWithTimestamp);
+    revalidatePath(`/customers/${customerId}`);
+}
