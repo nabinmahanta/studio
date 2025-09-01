@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,26 +27,36 @@ export default function LoginPage() {
   const [isRecaptchaVerified, setIsRecaptchaVerified] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
   const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          'size': 'normal',
-          'callback': () => {
-            // reCAPTCHA solved
-            setIsRecaptchaVerified(true);
-          },
-          'expired-callback': () => {
-              // Response expired. Ask user to solve reCAPTCHA again.
-              setIsRecaptchaVerified(false);
-              toast({
+    if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+            'size': 'normal',
+            'callback': () => {
+                // reCAPTCHA solved
+                setIsRecaptchaVerified(true);
+            },
+            'expired-callback': () => {
+                // Response expired. Ask user to solve reCAPTCHA again.
+                setLoading(false);
+                setIsRecaptchaVerified(false);
+                toast({
+                    variant: "destructive",
+                    title: "reCAPTCHA Expired",
+                    description: "Please solve the reCAPTCHA again.",
+                });
+            }
+        });
+        window.recaptchaVerifier.render().catch(error => {
+            console.error("reCAPTCHA render error:", error);
+            setLoading(false);
+            toast({
                 variant: "destructive",
-                title: "reCAPTCHA Expired",
-                description: "Please solve the reCAPTCHA again.",
-              });
-          }
-      });
-      window.recaptchaVerifier.render();
+                title: "reCAPTCHA Error",
+                description: "Could not render reCAPTCHA. Please refresh and try again.",
+            });
+        });
     }
   }
 
@@ -59,40 +69,57 @@ export default function LoginPage() {
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mobileNumber.length >= 10 && isRecaptchaVerified) {
-      setLoading(true);
-      try {
-        const appVerifier = window.recaptchaVerifier;
-        if (!appVerifier) {
-            throw new Error("reCAPTCHA not initialized");
-        }
-        const fullMobileNumber = `+91${mobileNumber}`;
-        const confirmationResult = await signInWithPhoneNumber(auth, fullMobileNumber, appVerifier);
-        window.confirmationResult = confirmationResult;
-        setStep('otp');
-        toast({
-          title: "OTP Sent",
-          description: `An OTP has been sent to ${fullMobileNumber}`,
-        });
-      } catch (error) {
-        console.error("Error sending OTP:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to send OTP",
-          description: "Please check your phone number and ensure Firebase phone auth is enabled.",
-        });
-        // Reset reCAPTCHA
-        window.recaptchaVerifier?.clear();
-        setIsRecaptchaVerified(false);
-      } finally {
-        setLoading(false);
+    if (!/^\d{10}$/.test(mobileNumber)) {
+        toast({ variant: "destructive", title: "Invalid Mobile Number", description: "Please enter a valid 10-digit number." });
+        return;
+    }
+    if (!isRecaptchaVerified) {
+        toast({ variant: "destructive", title: "reCAPTCHA Required", description: "Please complete the reCAPTCHA verification." });
+        return;
+    }
+
+    setLoading(true);
+    try {
+      const appVerifier = window.recaptchaVerifier;
+      if (!appVerifier) {
+          throw new Error("reCAPTCHA not initialized");
       }
+      const fullMobileNumber = `+91${mobileNumber}`;
+      const confirmationResult = await signInWithPhoneNumber(auth, fullMobileNumber, appVerifier);
+      window.confirmationResult = confirmationResult;
+      setStep('otp');
+      toast({
+        title: "OTP Sent",
+        description: `An OTP has been sent to ${fullMobileNumber}`,
+      });
+    } catch (error: any) {
+      console.error("Error sending OTP:", error);
+      let description = "Please check your number and try again.";
+      if (error.code === 'auth/too-many-requests') {
+        description = "You've made too many requests. Please wait a while before trying again.";
+      } else if (error.code === 'auth/invalid-phone-number') {
+        description = "The phone number is not valid. Please check it.";
+      }
+      toast({
+        variant: "destructive",
+        title: "Failed to send OTP",
+        description: description,
+      });
+      // Reset reCAPTCHA for the user to try again
+      window.recaptchaVerifier?.render();
+      setIsRecaptchaVerified(false);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length >= 6 && window.confirmationResult) {
+    if (otp.length < 6) {
+        toast({ variant: "destructive", title: "Invalid OTP", description: "Please enter the full 6-digit OTP." });
+        return;
+    }
+    if (window.confirmationResult) {
       setLoading(true);
       try {
         await window.confirmationResult.confirm(otp);
@@ -112,6 +139,15 @@ export default function LoginPage() {
       }
     }
   };
+  
+  const handleBack = () => {
+    setLoading(false);
+    setStep('mobile');
+    setOtp('');
+    setIsRecaptchaVerified(false);
+    // We need to re-render recaptcha when going back
+    setTimeout(() => setupRecaptcha(), 0);
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -142,14 +178,15 @@ export default function LoginPage() {
                     type="tel"
                     placeholder="10-digit mobile number"
                     value={mobileNumber}
-                    onChange={(e) => setMobileNumber(e.target.value)}
+                    onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     required
                     pattern="\d{10}"
                     className="rounded-l-none text-base"
+                    disabled={loading}
                     />
                 </div>
               </div>
-              <div id="recaptcha-container" className="flex justify-center"></div>
+              <div ref={recaptchaContainerRef} className="flex justify-center [&>div]:mx-auto"></div>
               <Button type="submit" className="w-full font-bold" disabled={loading || !isRecaptchaVerified}>
                 {loading ? <Loader2 className="animate-spin" /> : 'Send OTP'}
               </Button>
@@ -163,10 +200,11 @@ export default function LoginPage() {
                   type="text"
                   placeholder="6-digit OTP"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   required
                   maxLength={6}
                   className="text-center text-lg tracking-[0.5em]"
+                  disabled={loading}
                 />
               </div>
               <Button type="submit" className="w-full font-bold" disabled={loading}>
@@ -177,10 +215,7 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex justify-center">
             {step === 'otp' && (
-                 <Button variant="link" size="sm" onClick={() => {
-                   setStep('mobile');
-                   setIsRecaptchaVerified(false);
-                 }} disabled={loading}>
+                 <Button variant="link" size="sm" onClick={handleBack} disabled={loading}>
                     Back to mobile number
                 </Button>
             )}
