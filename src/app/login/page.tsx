@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,13 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Coins, Loader2 } from 'lucide-react';
 import { auth } from '@/lib/firebase';
-import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { signInWithPhoneNumber, ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
-// Extend window interface to include recaptchaVerifier
+// Extend window interface to include confirmationResult
 declare global {
   interface Window {
-    recaptchaVerifier?: RecaptchaVerifier;
     confirmationResult?: ConfirmationResult;
   }
 }
@@ -24,91 +23,20 @@ export default function LoginPage() {
   const [mobileNumber, setMobileNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isRecaptchaVerified, setIsRecaptchaVerified] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
-  const setupRecaptcha = () => {
-    if (!recaptchaContainerRef.current) return;
-    
-    // Ensure the container is empty before rendering a new reCAPTCHA
-    if (window.recaptchaVerifier) {
-        // This is a safety net, but the useEffect cleanup should handle it.
-        try {
-            window.recaptchaVerifier.clear();
-        } catch (error) {
-            console.error("Error clearing existing verifier in setupRecaptcha:", error);
-        }
-    }
-    if (recaptchaContainerRef.current) {
-        recaptchaContainerRef.current.innerHTML = '';
-    }
-    
-    try {
-      const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-          'size': 'normal',
-          'callback': () => {
-              setIsRecaptchaVerified(true);
-          },
-          'expired-callback': () => {
-              setIsRecaptchaVerified(false);
-              toast({
-                  variant: "destructive",
-                  title: "reCAPTCHA Expired",
-                  description: "Please solve the reCAPTCHA again.",
-              });
-          }
-      });
-
-      window.recaptchaVerifier = verifier;
-      
-      verifier.render().catch(error => {
-          console.error("reCAPTCHA render error:", error);
-          setLoading(false);
-          let description = "Could not render reCAPTCHA. Please refresh and try again.";
-          if (error.code === 'auth/internal-error') {
-              description = "An internal error occurred. This might be a configuration issue. Please try again later."
-          }
-          toast({
-              variant: "destructive",
-              title: "reCAPTCHA Error",
-              description: description,
-          });
-      });
-    } catch (error) {
-      console.error("Failed to setup reCAPTCHA:", error);
-       toast({
-          variant: "destructive",
-          title: "Setup Error",
-          description: "Could not initialize login verification. Please check your connection and refresh.",
-      });
-    }
-  }
-  
-  // Effect to set up reCAPTCHA on initial mount and clean it up properly
   useEffect(() => {
-    if (step === 'mobile' && !window.recaptchaVerifier) {
-      setupRecaptcha();
-    }
-    
-    // Cleanup function to run when component unmounts. This is crucial.
-    return () => {
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (error) {
-          // This can sometimes throw an error if the widget is already gone, so we catch it.
-          console.error("Failed to clear reCAPTCHA on cleanup:", error)
-        }
-        window.recaptchaVerifier = undefined;
+    // This is a dummy verifier that doesn't show a reCAPTCHA widget.
+    // It's often used for testing or in environments where you handle verification differently.
+    // NOTE: For production, you must configure App Check in Firebase.
+    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'sign-in-button', {
+      'size': 'invisible',
+      'callback': () => {
+        // reCAPTCHA solved, allow sign-in
       }
-      // Also ensure the DOM is clean
-      if (recaptchaContainerRef.current) {
-        recaptchaContainerRef.current.innerHTML = "";
-      }
-    };
-  }, [step]); // Rerun effect if the step changes
+    });
+  }, []);
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,18 +46,15 @@ export default function LoginPage() {
         toast({ variant: "destructive", title: "Invalid Mobile Number", description: "Please enter a valid 10-digit number." });
         return;
     }
-    if (!isRecaptchaVerified) {
-        toast({ variant: "destructive", title: "reCAPTCHA Required", description: "Please complete the reCAPTCHA verification." });
-        return;
-    }
 
     setLoading(true);
     try {
       const appVerifier = window.recaptchaVerifier;
       if (!appVerifier) {
-          throw new Error("reCAPTCHA not initialized");
+          throw new Error("reCAPTCHA verifier not initialized");
       }
       const fullMobileNumber = `+91${mobileNumber}`;
+      // The invisible reCAPTCHA will be triggered by this call
       const confirmationResult = await signInWithPhoneNumber(auth, fullMobileNumber, appVerifier);
       window.confirmationResult = confirmationResult;
       setStep('otp');
@@ -156,10 +81,6 @@ export default function LoginPage() {
         title: "Failed to send OTP",
         description: description,
       });
-      // Reset reCAPTCHA for the user to try again
-      setIsRecaptchaVerified(false);
-      // Re-run the setup to be safe
-      setupRecaptcha();
     } finally {
       setLoading(false);
     }
@@ -196,20 +117,6 @@ export default function LoginPage() {
     setLoading(false);
     setStep('mobile');
     setOtp('');
-    setIsRecaptchaVerified(false);
-    // Crucially, when we go back, we need to ensure the verifier is gone
-    // so the useEffect can set it up cleanly again.
-    if (window.recaptchaVerifier) {
-        try {
-            window.recaptchaVerifier.clear();
-        } catch (error) {
-            console.error("Error clearing verifier on back:", error);
-        }
-        window.recaptchaVerifier = undefined;
-    }
-    if (recaptchaContainerRef.current) {
-        recaptchaContainerRef.current.innerHTML = '';
-    }
   }
 
   return (
@@ -249,8 +156,7 @@ export default function LoginPage() {
                     />
                 </div>
               </div>
-              <div ref={recaptchaContainerRef} className="flex justify-center [&>div]:mx-auto"></div>
-              <Button type="submit" className="w-full font-bold" disabled={loading || !isRecaptchaVerified}>
+              <Button id="sign-in-button" type="submit" className="w-full font-bold" disabled={loading}>
                 {loading ? <Loader2 className="animate-spin" /> : 'Send OTP'}
               </Button>
             </form>
