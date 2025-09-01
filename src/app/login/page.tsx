@@ -30,9 +30,15 @@ export default function LoginPage() {
   const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
   const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
+    if (window.recaptchaVerifier) {
+        // If it already exists, clear it before creating a new one
+        // This is important for re-attempts
+        window.recaptchaVerifier.clear();
+    }
+    if (recaptchaContainerRef.current) {
         window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
             'size': 'normal',
+            'timeout': 120000, // 2 minutes timeout
             'callback': () => {
                 // reCAPTCHA solved
                 setIsRecaptchaVerified(true);
@@ -64,6 +70,13 @@ export default function LoginPage() {
   useEffect(() => {
     if (step === 'mobile') {
       setupRecaptcha();
+    }
+    
+    // Cleanup on unmount
+    return () => {
+        if (window.recaptchaVerifier) {
+            window.recaptchaVerifier.clear();
+        }
     }
   }, [step]);
 
@@ -99,6 +112,8 @@ export default function LoginPage() {
         description = "You've made too many requests. Please wait a while before trying again.";
       } else if (error.code === 'auth/invalid-phone-number') {
         description = "The phone number is not valid. Please check it.";
+      } else if (error.code === 'auth/billing-not-enabled'){
+        description = "Firebase billing is not enabled for this project. Use a test number."
       }
       toast({
         variant: "destructive",
@@ -106,7 +121,7 @@ export default function LoginPage() {
         description: description,
       });
       // Reset reCAPTCHA for the user to try again
-      window.recaptchaVerifier?.render();
+      setupRecaptcha();
       setIsRecaptchaVerified(false);
     } finally {
       setLoading(false);
@@ -145,8 +160,6 @@ export default function LoginPage() {
     setStep('mobile');
     setOtp('');
     setIsRecaptchaVerified(false);
-    // We need to re-render recaptcha when going back
-    setTimeout(() => setupRecaptcha(), 0);
   }
 
   return (
