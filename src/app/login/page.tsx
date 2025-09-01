@@ -95,8 +95,8 @@ export default function LoginPage() {
         description = "Firebase billing is not enabled for this project. Use a test number."
       } else if (error.code === 'auth/network-request-failed') {
         description = "Network error. Please check your internet connection and try again.";
-      } else if (error.code === 'auth/internal-error') {
-        description = "An internal error occurred. This might be a configuration issue. Please try again later."
+      } else if (error.code === 'auth/internal-error' || error.message.includes('reCAPTCHA has already been rendered')) {
+        description = "An internal error occurred. This might be a configuration issue. Please refresh the page and try again."
       }
       toast({
         variant: "destructive",
