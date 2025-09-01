@@ -27,20 +27,22 @@ const calculateBalance = (transactions: Transaction[]): number => {
 };
 
 export const getCustomers = async (): Promise<(Customer & { balance: number })[]> => {
-  // 1. Fetch all customers in one query
-  const customersCol = collection(db, 'customers');
-  const customersQuery = query(customersCol, orderBy('name'));
-  const customerSnapshot = await getDocs(customersQuery);
+  // 1. Fetch all customers and all transactions in parallel for better performance
+  const customersQuery = query(collection(db, 'customers'), orderBy('name'));
+  const transactionsQuery = collectionGroup(db, 'transactions');
+
+  const [customerSnapshot, transactionsSnapshot] = await Promise.all([
+    getDocs(customersQuery),
+    getDocs(transactionsQuery)
+  ]);
+
+  // 2. Process customers into a map for efficient lookup
   const customers = customerSnapshot.docs.map(doc => ({
     id: doc.id,
     ...(doc.data() as Omit<Customer, 'id' | 'transactions'>),
     transactions: [] // Initialize transactions array
   }));
   const customerMap = new Map(customers.map(c => [c.id, c]));
-
-  // 2. Fetch all transactions for all customers in a single collectionGroup query
-  const transactionsQuery = collectionGroup(db, 'transactions');
-  const transactionsSnapshot = await getDocs(transactionsQuery);
 
   // 3. Group transactions by customer
   transactionsSnapshot.forEach(doc => {
@@ -50,6 +52,8 @@ export const getCustomers = async (): Promise<(Customer & { balance: number })[]
       date: (doc.data().date as Timestamp).toDate().toISOString(),
     } as Transaction;
     
+    // The parent of a transaction document is the 'transactions' collection, 
+    // and its parent is the customer document.
     const customerId = doc.ref.parent.parent?.id;
     if (customerId && customerMap.has(customerId)) {
       customerMap.get(customerId)!.transactions.push(transaction);
@@ -58,7 +62,7 @@ export const getCustomers = async (): Promise<(Customer & { balance: number })[]
 
   // 4. Calculate balance for each customer and sort transactions
   const result = Array.from(customerMap.values()).map(customer => {
-    // Sort transactions by date descending
+    // Sort transactions by date descending (most recent first)
     customer.transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const balance = calculateBalance(customer.transactions);
     return { ...customer, balance };
@@ -101,7 +105,7 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
   };
 };
 
-export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer> => {
+export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer & { transactions: [] }> => {
   const customersCol = collection(db, 'customers');
   const newCustomerRef = await addDoc(customersCol, customerData);
 
