@@ -30,37 +30,19 @@ export default function LoginPage() {
   const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
   const setupRecaptcha = () => {
-    // If a verifier already exists, re-render it. Otherwise, create a new one.
-    // This avoids race conditions and internal errors with .clear()
-    if (window.recaptchaVerifier) {
-      window.recaptchaVerifier.render().catch(error => {
-        console.error("reCAPTCHA re-render error:", error);
-        // If re-render fails, try creating a new one from scratch.
-        if (recaptchaContainerRef.current) {
-            recaptchaContainerRef.current.innerHTML = "";
-            window.recaptchaVerifier = undefined;
-            createRecaptcha();
-        }
-      });
-    } else if (recaptchaContainerRef.current) {
-      createRecaptcha();
-    }
-  }
-
-  const createRecaptcha = () => {
     if (!recaptchaContainerRef.current) return;
-    
-    // Ensure container is empty before rendering
+
+    // Ensure the container is empty before creating a new verifier
+    // This is the key to preventing duplicate widgets
     recaptchaContainerRef.current.innerHTML = "";
+
     const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
         'size': 'normal',
         'timeout': 120000, // 2 minutes timeout
         'callback': () => {
-            // reCAPTCHA solved
             setIsRecaptchaVerified(true);
         },
         'expired-callback': () => {
-            // Response expired. Ask user to solve reCAPTCHA again.
             setLoading(false);
             setIsRecaptchaVerified(false);
             toast({
@@ -90,15 +72,16 @@ export default function LoginPage() {
       setupRecaptcha();
     }
     
-    // Cleanup on unmount
+    // Cleanup on unmount - just remove our reference
     return () => {
-        // Just remove the instance, no need to call .clear() which can cause errors
         window.recaptchaVerifier = undefined;
     }
   }, [step]);
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent multiple submissions
+
     if (!/^\d{10}$/.test(mobileNumber)) {
         toast({ variant: "destructive", title: "Invalid Mobile Number", description: "Please enter a valid 10-digit number." });
         return;
