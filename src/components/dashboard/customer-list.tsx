@@ -75,7 +75,6 @@ export default function CustomerList({ customers, onSave }: CustomerListProps) {
                                 <Link href={`/customers/${customer.id}`}>View Details</Link>
                             </DropdownMenuItem>
                             <AddEditCustomerDialog customer={customer} onSave={onSave}>
-                              {/* The trigger for the dialog needs to be an element that can receive a ref. A plain button works perfectly */}
                               <button className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 w-full text-left">
                                 Edit
                               </button>

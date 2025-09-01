@@ -26,54 +26,48 @@ const calculateBalance = (transactions: Transaction[]): number => {
   }, 0);
 };
 
-export const getCustomers = async (): Promise<(Customer & { balance: number })[]> => {
-  // 1. Fetch all customers and all transactions in parallel for better performance
-  const customersQuery = query(collection(db, 'customers'), orderBy('name'));
-  const transactionsQuery = collectionGroup(db, 'transactions');
+export const getCustomers = async (userId: string): Promise<(Customer & { balance: number })[]> => {
+  if (!userId) return [];
+  
+  const customersPath = `users/${userId}/customers`;
+  const customersQuery = query(collection(db, customersPath), orderBy('name'));
+  
+  // We can't query all subcollections easily without knowing the user ID on the backend securely,
+  // so we fetch transactions per customer. This can be slow for many customers.
+  // A better long-term solution would involve a different data structure or backend logic.
+  const customerSnapshot = await getDocs(customersQuery);
 
-  const [customerSnapshot, transactionsSnapshot] = await Promise.all([
-    getDocs(customersQuery),
-    getDocs(transactionsQuery)
-  ]);
-
-  // 2. Process customers into a map for efficient lookup
-  const customers = customerSnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...(doc.data() as Omit<Customer, 'id' | 'transactions'>),
-    transactions: [] // Initialize transactions array
-  }));
-  const customerMap = new Map(customers.map(c => [c.id, c]));
-
-  // 3. Group transactions by customer
-  transactionsSnapshot.forEach(doc => {
-    const transaction = {
-      id: doc.id,
-      ...doc.data(),
-      date: (doc.data().date as Timestamp).toDate().toISOString(),
-    } as Transaction;
+  const customersWithBalance = await Promise.all(customerSnapshot.docs.map(async (docSnap) => {
+    const customer = {
+      id: docSnap.id,
+      ...(docSnap.data() as Omit<Customer, 'id' | 'transactions'>),
+    };
     
-    // The parent of a transaction document is the 'transactions' collection, 
-    // and its parent is the customer document.
-    const customerId = doc.ref.parent.parent?.id;
-    if (customerId && customerMap.has(customerId)) {
-      customerMap.get(customerId)!.transactions.push(transaction);
-    }
-  });
+    const transactionsCol = collection(db, customersPath, customer.id, 'transactions');
+    const transactionsQuery = query(transactionsCol, orderBy('date', 'desc'));
+    const transactionsSnapshot = await getDocs(transactionsQuery);
 
-  // 4. Calculate balance for each customer and sort transactions
-  const result = Array.from(customerMap.values()).map(customer => {
-    // Sort transactions by date descending (most recent first)
-    customer.transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const balance = calculateBalance(customer.transactions);
-    return { ...customer, balance };
-  });
+    const transactions = transactionsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString(),
+        } as Transaction;
+    });
 
-  return result;
+    const balance = calculateBalance(transactions);
+    return { ...customer, transactions, balance };
+  }));
+
+  return customersWithBalance;
 };
 
 
-export const getCustomerById = async (id: string): Promise<(Customer & { balance: number }) | undefined> => {
-  const customerDocRef = doc(db, 'customers', id);
+export const getCustomerById = async (userId: string, id: string): Promise<(Customer & { balance: number }) | undefined> => {
+  if (!userId) return undefined;
+  
+  const customerDocRef = doc(db, `users/${userId}/customers`, id);
   const customerDoc = await getDoc(customerDocRef);
 
   if (!customerDoc.exists()) {
@@ -82,7 +76,7 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
 
   const customerData = customerDoc.data() as Omit<Customer, 'id'>;
   
-  const transactionsCol = collection(db, 'customers', id, 'transactions');
+  const transactionsCol = collection(db, `users/${userId}/customers`, id, 'transactions');
   const transactionsQuery = query(transactionsCol, orderBy('date', 'desc'));
   const transactionsSnapshot = await getDocs(transactionsQuery);
 
@@ -105,11 +99,11 @@ export const getCustomerById = async (id: string): Promise<(Customer & { balance
   };
 };
 
-export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer & { transactions: [] }> => {
-  const customersCol = collection(db, 'customers');
+export const addCustomer = async (userId: string, customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer & { transactions: [] }> => {
+  if (!userId) throw new Error("User not authenticated");
+  
+  const customersCol = collection(db, `users/${userId}/customers`);
   const newCustomerRef = await addDoc(customersCol, customerData);
-
-  revalidatePath('/dashboard');
   
   return {
     id: newCustomerRef.id,
@@ -118,21 +112,21 @@ export const addCustomer = async (customerData: Omit<Customer, 'id' | 'transacti
   };
 };
 
-export const updateCustomer = async (customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<void> => {
-  const customerDocRef = doc(db, 'customers', customerId);
+export const updateCustomer = async (userId: string, customerId: string, customerData: Partial<Omit<Customer, 'id' | 'transactions' | 'balance'>>): Promise<void> => {
+  if (!userId) throw new Error("User not authenticated");
+  
+  const customerDocRef = doc(db, `users/${userId}/customers`, customerId);
   await updateDoc(customerDocRef, customerData);
-  revalidatePath('/dashboard');
-  revalidatePath(`/customers/${customerId}`);
 };
 
-export const addTransaction = async (customerId: string, transactionData: Omit<Transaction, 'id'>): Promise<void> => {
+export const addTransaction = async (userId: string, customerId: string, transactionData: Omit<Transaction, 'id'>): Promise<void> => {
+    if (!userId) throw new Error("User not authenticated");
+
     const transactionWithTimestamp = {
         ...transactionData,
         date: Timestamp.fromDate(new Date(transactionData.date)),
     };
     
-    const transactionsColRef = collection(db, 'customers', customerId, 'transactions');
+    const transactionsColRef = collection(db, `users/${userId}/customers`, customerId, 'transactions');
     await addDoc(transactionsColRef, transactionWithTimestamp);
-    revalidatePath(`/customers/${customerId}`);
-    revalidatePath('/dashboard');
 }

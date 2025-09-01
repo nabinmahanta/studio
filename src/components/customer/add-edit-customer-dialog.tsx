@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import type { Customer } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const customerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -37,6 +38,7 @@ type AddEditCustomerDialogProps = {
 export default function AddEditCustomerDialog({ customer, onSave, children }: AddEditCustomerDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
   const form = useForm<CustomerFormValues>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
@@ -53,6 +55,12 @@ export default function AddEditCustomerDialog({ customer, onSave, children }: Ad
     if (success) {
       setOpen(false);
       form.reset();
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Save Failed",
+            description: "Could not save customer details. Please try again."
+        });
     }
   };
   

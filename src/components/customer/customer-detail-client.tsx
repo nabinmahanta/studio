@@ -1,10 +1,10 @@
 'use client';
 
 import type { Customer, Transaction } from '@/lib/types';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Phone, Home } from 'lucide-react';
+import { ArrowLeft, Phone, Home, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
@@ -13,36 +13,70 @@ import TransactionList from './transaction-list';
 import AddTransactionDialog from './add-transaction-dialog';
 import GenerateReminderDialog from './generate-reminder-dialog';
 import DownloadReportDialog from './download-report-dialog';
-import { addTransaction } from '@/lib/data';
+import { addTransaction, getCustomerById } from '@/lib/data';
 import { useToast } from '@/hooks/use-toast';
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 type CustomerDetailClientProps = {
-  customer: Customer & { balance: number };
+  customerId: string;
 };
 
-export default function CustomerDetailClient({ customer }: CustomerDetailClientProps) {
-  const [balance, setBalance] = useState(customer.balance);
+export default function CustomerDetailClient({ customerId }: CustomerDetailClientProps) {
+  const [customer, setCustomer] = useState<(Customer & { balance: number }) | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const businessName = "Your Business"; // This would come from user settings in a real app
   const router = useRouter();
   const { toast } = useToast();
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUserId(user.uid);
+        try {
+          const fetchedCustomer = await getCustomerById(user.uid, customerId);
+          if (fetchedCustomer) {
+            setCustomer(fetchedCustomer);
+          } else {
+            toast({ variant: 'destructive', title: 'Customer not found' });
+            router.push('/dashboard');
+          }
+        } catch (error) {
+          console.error("Failed to fetch customer", error);
+          toast({ variant: 'destructive', title: 'Error', description: 'Failed to load customer data.' });
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // No user is signed in.
+        router.push('/login');
+      }
+    });
+    return () => unsubscribe();
+  }, [customerId, router, toast]);
+
   const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id' | 'date'>) => {
+    if (!userId || !customer) return;
+
     try {
         const transactionWithDate: Omit<Transaction, 'id'> = {
             ...newTransaction,
             date: new Date().toISOString(),
         };
-        await addTransaction(customer.id, transactionWithDate);
-
-        // No need to manually update state, revalidatePath in the server action will trigger a refresh.
-        // For instant feedback, you can still update client state, but it's often better to rely on the refresh.
+        await addTransaction(userId, customer.id, transactionWithDate);
+        
         toast({
             title: "Transaction Added",
             description: `Successfully recorded new transaction.`,
         });
-        
-        router.refresh(); 
 
+        // Refetch customer data to update balance and transaction list
+        const updatedCustomer = await getCustomerById(userId, customerId);
+        if (updatedCustomer) {
+            setCustomer(updatedCustomer);
+        }
+        
     } catch (error) {
         console.error("Failed to add transaction:", error);
         toast({
@@ -52,6 +86,14 @@ export default function CustomerDetailClient({ customer }: CustomerDetailClientP
         });
     }
   };
+  
+  if (loading || !customer) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
