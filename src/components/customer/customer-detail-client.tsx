@@ -23,7 +23,7 @@ type CustomerDetailClientProps = {
 };
 
 export default function CustomerDetailClient({ customerId }: CustomerDetailClientProps) {
-  const [customer, setCustomer] = useState<(Customer & { balance: number }) | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const businessName = "Your Business"; // This would come from user settings in a real app

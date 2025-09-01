@@ -12,4 +12,5 @@ export interface Customer {
   mobile: string;
   address?: string;
   transactions: Transaction[];
+  balance: number;
 }

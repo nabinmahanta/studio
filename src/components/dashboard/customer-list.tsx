@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import AddEditCustomerDialog from '../customer/add-edit-customer-dialog';
 
 type CustomerListProps = {
-  customers: (Customer & { balance: number })[];
+  customers: Customer[];
   onSave: (customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>, customerId?: string) => Promise<boolean>;
 };
 

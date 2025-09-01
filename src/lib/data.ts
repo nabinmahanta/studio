@@ -13,58 +13,35 @@ import {
   orderBy,
   Timestamp,
   writeBatch,
+  runTransaction,
   collectionGroup
 } from 'firebase/firestore';
-import { revalidatePath } from 'next/cache';
 
-const calculateBalance = (transactions: Transaction[]): number => {
-  return transactions.reduce((acc, t) => {
-    if (t.type === 'credit') { // You Gave
-      return acc + t.amount;
-    }
-    return acc - t.amount; // You Got
-  }, 0);
-};
-
-export const getCustomers = async (userId: string): Promise<(Customer & { balance: number })[]> => {
+export const getCustomers = async (userId: string): Promise<Customer[]> => {
   if (!userId) return [];
   
   const customersPath = `users/${userId}/customers`;
   const customersQuery = query(collection(db, customersPath), orderBy('name'));
   
-  // We can't query all subcollections easily without knowing the user ID on the backend securely,
-  // so we fetch transactions per customer. This can be slow for many customers.
-  // A better long-term solution would involve a different data structure or backend logic.
   const customerSnapshot = await getDocs(customersQuery);
 
-  const customersWithBalance = await Promise.all(customerSnapshot.docs.map(async (docSnap) => {
-    const customer = {
+  const customers = customerSnapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
       id: docSnap.id,
-      ...(docSnap.data() as Omit<Customer, 'id' | 'transactions'>),
-    };
-    
-    const transactionsCol = collection(db, customersPath, customer.id, 'transactions');
-    const transactionsQuery = query(transactionsCol, orderBy('date', 'desc'));
-    const transactionsSnapshot = await getDocs(transactionsQuery);
+      name: data.name,
+      mobile: data.mobile,
+      address: data.address,
+      balance: data.balance || 0,
+      transactions: [], // Transactions are now loaded on demand
+    } as Customer;
+  });
 
-    const transactions = transactionsSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
-        } as Transaction;
-    });
-
-    const balance = calculateBalance(transactions);
-    return { ...customer, transactions, balance };
-  }));
-
-  return customersWithBalance;
+  return customers;
 };
 
 
-export const getCustomerById = async (userId: string, id: string): Promise<(Customer & { balance: number }) | undefined> => {
+export const getCustomerById = async (userId: string, id: string): Promise<Customer | undefined> => {
   if (!userId) return undefined;
   
   const customerDocRef = doc(db, `users/${userId}/customers`, id);
@@ -74,7 +51,7 @@ export const getCustomerById = async (userId: string, id: string): Promise<(Cust
     return undefined;
   }
 
-  const customerData = customerDoc.data() as Omit<Customer, 'id'>;
+  const customerData = customerDoc.data() as Omit<Customer, 'id' | 'transactions'>;
   
   const transactionsCol = collection(db, `users/${userId}/customers`, id, 'transactions');
   const transactionsQuery = query(transactionsCol, orderBy('date', 'desc'));
@@ -89,25 +66,28 @@ export const getCustomerById = async (userId: string, id: string): Promise<(Cust
     } as Transaction;
   });
 
-  const balance = calculateBalance(transactions);
-
   return { 
     id: customerDoc.id, 
     ...customerData, 
-    transactions, 
-    balance 
+    transactions,
+    balance: customerData.balance || 0
   };
 };
 
-export const addCustomer = async (userId: string, customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer & { transactions: [] }> => {
+export const addCustomer = async (userId: string, customerData: Omit<Customer, 'id' | 'transactions' | 'balance'>): Promise<Customer> => {
   if (!userId) throw new Error("User not authenticated");
+
+  const customerWithBalance = {
+    ...customerData,
+    balance: 0,
+  }
   
   const customersCol = collection(db, `users/${userId}/customers`);
-  const newCustomerRef = await addDoc(customersCol, customerData);
+  const newCustomerRef = await addDoc(customersCol, customerWithBalance);
   
   return {
     id: newCustomerRef.id,
-    ...customerData,
+    ...customerWithBalance,
     transactions: [],
   };
 };
@@ -122,11 +102,27 @@ export const updateCustomer = async (userId: string, customerId: string, custome
 export const addTransaction = async (userId: string, customerId: string, transactionData: Omit<Transaction, 'id'>): Promise<void> => {
     if (!userId) throw new Error("User not authenticated");
 
+    const customerDocRef = doc(db, `users/${userId}/customers`, customerId);
+    const transactionsColRef = collection(db, `users/${userId}/customers`, customerId, 'transactions');
+
     const transactionWithTimestamp = {
         ...transactionData,
         date: Timestamp.fromDate(new Date(transactionData.date)),
     };
-    
-    const transactionsColRef = collection(db, `users/${userId}/customers`, customerId, 'transactions');
-    await addDoc(transactionsColRef, transactionWithTimestamp);
+
+    await runTransaction(db, async (firestoreTransaction) => {
+        const customerDoc = await firestoreTransaction.get(customerDocRef);
+        if (!customerDoc.exists()) {
+            throw "Customer does not exist!";
+        }
+
+        const currentBalance = customerDoc.data().balance || 0;
+        const amountChange = transactionData.type === 'credit' ? transactionData.amount : -transactionData.amount;
+        const newBalance = currentBalance + amountChange;
+
+        firestoreTransaction.update(customerDocRef, { balance: newBalance });
+        
+        const newTransactionRef = doc(transactionsColRef);
+        firestoreTransaction.set(newTransactionRef, transactionWithTimestamp);
+    });
 }

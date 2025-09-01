@@ -22,7 +22,7 @@ type Stats = {
 
 export default function DashboardClient() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [customers, setCustomers] = useState<(Customer & { balance: number })[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [stats, setStats] = useState<Stats>({ totalToCollect: 0, totalToGive: 0, totalCustomers: 0 });
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
