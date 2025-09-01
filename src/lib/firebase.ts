@@ -3,13 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  "projectId": "lekha-sahayak-htnae",
-  "appId": "1:952217493126:web:890a51bcfeb2fb60433b07",
-  "storageBucket": "lekha-sahayak-htnae.firebasestorage.app",
-  "apiKey": "AIzaSyChjCZQBiLmr6YxkivJ8xIsIS_EwtUoF4k",
-  "authDomain": "lekha-sahayak-htnae.firebaseapp.com",
-  "measurementId": "",
-  "messagingSenderId": "952217493126"
+  "projectId": "khatapay-5a219",
+  "appId": "1:602356943444:web:f8515e2193b3334e341a02",
+  "storageBucket": "khatapay-5a219.appspot.com",
+  "apiKey": "AIzaSyAzYBDG70p6dtmHk3fXgYI_LpCj4C12dZA",
+  "authDomain": "khatapay-5a219.firebaseapp.com",
+  "messagingSenderId": "602356943444"
 };
 
 // Initialize Firebase
